@@ -371,7 +371,14 @@ async def send_message(request: Request, authorization: str | None = Header(defa
             context_id = message.get("contextId") or secrets.token_urlsafe(24)
             try:
                 decisions = get_cached_decisions(conn, packages)
-            except Exception:
+            except Exception as exc:
+                # Keep invoice contents and API credentials out of logs. Log a
+                # sanitized validation summary so production failures are diagnosable.
+                if isinstance(exc, ValidationError):
+                    details = json.dumps(exc.errors(include_input=False), ensure_ascii=False)
+                else:
+                    details = f"{type(exc).__name__}: {str(exc)[:500]}"
+                print(f"DECISION_PIPELINE_FAILURE {details}", flush=True)
                 conn.rollback()
                 return error(422, "DECISION_VALIDATION_FAILED", "Invoice decisions could not be validated.")
             proposals = []
